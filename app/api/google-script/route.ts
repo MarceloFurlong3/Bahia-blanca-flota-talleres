@@ -22,8 +22,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
-
-// ESTA ES LA PARTE NUEVA: Maneja el envío de la foto (Base64)
 export async function POST(request: NextRequest) {
   const googleScriptUrl = process.env.GOOGLE_SCRIPT_URL;
   const { searchParams } = new URL(request.url);
@@ -33,22 +31,26 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Obtenemos el cuerpo de la petición (donde viene la imagen)
     const body = await request.json();
+    const action = searchParams.get('action');
+    const filename = searchParams.get('filename');
 
-    // Reenviamos a Google Script incluyendo los parámetros de la URL y el cuerpo
-    const finalUrl = `${googleScriptUrl}?${searchParams.toString()}`;
+    // Construimos la petición a Google de forma que la entienda siempre
+    const finalUrl = `${googleScriptUrl}?action=${action}&filename=${encodeURIComponent(filename || '')}`;
     
     const response = await fetch(finalUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      // Enviamos el base64 directamente en el cuerpo
+      body: JSON.stringify({
+        base64: body.base64,
+        filename: filename,
+        action: action
+      }),
     });
 
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Error en Proxy POST:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

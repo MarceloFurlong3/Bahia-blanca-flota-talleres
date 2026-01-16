@@ -139,47 +139,61 @@ export async function finalizarVehiculo(
   }
 }
 
+
+
 /**
  * MODIFICADO: Sube la imagen convirtiéndola a Base64 para el Script de Google
  */
 export async function uploadImage(file: File): Promise<string | null> {
   try {
-    // 1. Convertir el archivo a Base64
+    console.log("--- 🏁 INICIO DE SUBIDA ---");
+    console.log("Archivo seleccionado:", file.name, "Tamaño:", file.size, "bytes");
+
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        // Quitamos el prefijo "data:image/jpeg;base64,"
         resolve(result.split(',')[1]);
       };
       reader.onerror = error => reject(error);
       reader.readAsDataURL(file);
     });
 
-    // 2. Preparar los parámetros para el Proxy
+    console.log("✅ Imagen convertida a Base64 (primeros 50 caracteres):", base64.substring(0, 50) + "...");
+
     const params = new URLSearchParams({
       action: "uploadImage",
       filename: file.name,
     });
 
-    // 3. Enviar vía POST a través del proxy para evitar límites de URL
-    const response = await fetch(`${API_URL}?${params.toString()}`, {
+    const urlConParams = `${API_URL}?${params.toString()}`;
+    console.log("Enviando petición POST a:", urlConParams);
+
+    const response = await fetch(urlConParams, {
       method: 'POST',
       body: JSON.stringify({ base64: base64 }),
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) throw new Error("Error en la subida");
+    console.log("Respuesta del servidor (status):", response.status);
 
     const data = await response.json();
-    return data.url || null; // Retorna la URL de Google Drive
+    console.log("Datos recibidos de Google:", data);
+
+    if (data.success) {
+      console.log("🚀 ¡ÉXITO! URL de la imagen:", data.url);
+      return data.url;
+    } else {
+      console.error("❌ Error devuelto por Google:", data.error);
+      return null;
+    }
   } catch (error) {
-    console.error("Error subiendo imagen:", error);
+    console.error("💥 ERROR CRÍTICO en la subida:", error);
     return null;
   }
 }
+
+
 
 // --- UTILIDADES ---
 
