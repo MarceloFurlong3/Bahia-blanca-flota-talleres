@@ -1,8 +1,6 @@
 // Configuración de la API - Ahora apunta a la ruta local de Next.js
 export const API_URL = "/api/google-script";
 
-console.log("Conectando a API vía Proxy:", API_URL);
-
 export interface Vehiculo {
   RI: string;
   Tipo: string;
@@ -22,6 +20,9 @@ export interface Vehiculo {
   QR_URL: string;
 }
 
+/**
+ * Obtiene la lista completa de vehículos
+ */
 export async function fetchVehiculos(): Promise<Vehiculo[]> {
   try {
     const response = await fetch(`${API_URL}?action=getVehiculos`);
@@ -47,6 +48,9 @@ export async function fetchVehiculos(): Promise<Vehiculo[]> {
   }
 }
 
+/**
+ * Obtiene el historial específico de un vehículo por su RI
+ */
 export async function fetchHistorialVehiculo(ri: string): Promise<string> {
   try {
     const response = await fetch(`${API_URL}?action=getHistorial&ri=${encodeURIComponent(ri)}`, {
@@ -66,6 +70,9 @@ export async function fetchHistorialVehiculo(ri: string): Promise<string> {
   }
 }
 
+/**
+ * Actualiza los datos de un vehículo (Estado, Área, Motivo, etc.)
+ */
 export async function updateVehiculo(ri: string, updates: Partial<Vehiculo>, usuario?: string): Promise<boolean> {
   try {
     const params = new URLSearchParams({
@@ -96,6 +103,9 @@ export async function updateVehiculo(ri: string, updates: Partial<Vehiculo>, usu
   }
 }
 
+/**
+ * Finaliza el trabajo de un vehículo y lo marca como Operativo
+ */
 export async function finalizarVehiculo(
   ri: string,
   resultado: string,
@@ -129,19 +139,49 @@ export async function finalizarVehiculo(
   }
 }
 
+/**
+ * MODIFICADO: Sube la imagen convirtiéndola a Base64 para el Script de Google
+ */
 export async function uploadImage(file: File): Promise<string | null> {
   try {
+    // 1. Convertir el archivo a Base64
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Quitamos el prefijo "data:image/jpeg;base64,"
+        resolve(result.split(',')[1]);
+      };
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Preparar los parámetros para el Proxy
     const params = new URLSearchParams({
       action: "uploadImage",
       filename: file.name,
-    })
-    const response = await fetch(`${API_URL}?${params.toString()}`)
-    const data = await response.json()
-    return data.url || null
+    });
+
+    // 3. Enviar vía POST a través del proxy para evitar límites de URL
+    const response = await fetch(`${API_URL}?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({ base64: base64 }),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) throw new Error("Error en la subida");
+
+    const data = await response.json();
+    return data.url || null; // Retorna la URL de Google Drive
   } catch (error) {
-    return null
+    console.error("Error subiendo imagen:", error);
+    return null;
   }
 }
+
+// --- UTILIDADES ---
 
 export interface SuministroInfo {
   numero: string
@@ -183,7 +223,6 @@ export function puedeFinalizarVehiculo(suministrosText: string): { puede: boolea
   return { puede: true }
 }
 
-// Función que faltaba
 function getDemoData(): Vehiculo[] {
   return [
     {
