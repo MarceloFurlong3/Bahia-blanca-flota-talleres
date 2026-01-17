@@ -33,12 +33,12 @@ const ESTADO_ICONS: Record<string, typeof CheckCircle> = {
 }
 
 const SUMINISTRO_ESTADO_COLORS: Record<SuministroInfo["estado"], "default" | "secondary" | "destructive" | "outline"> =
-  {
-    Terminado: "default",
-    Cancelado: "secondary",
-    Pendiente: "destructive",
-    Desconocido: "outline",
-  }
+{
+  Terminado: "default",
+  Cancelado: "secondary",
+  Pendiente: "destructive",
+  Desconocido: "outline",
+}
 
 export function VehiculoDetail({ vehiculo, open, onOpenChange, onEdit }: VehiculoDetailProps) {
   const { user } = useAuth()
@@ -74,14 +74,18 @@ export function VehiculoDetail({ vehiculo, open, onOpenChange, onEdit }: Vehicul
         <div className="space-y-6">
           {/* Foto principal del vehículo */}
           {vehiculo.Foto_URL && (
-            <div className="relative w-full h-64 rounded-lg overflow-hidden bg-muted">
-              <Image
-                src={vehiculo.Foto_URL || "/placeholder.svg"}
-                alt={`Vehículo ${vehiculo.Patente}`}
-                fill
-                className="object-cover"
-                crossOrigin="anonymous"
-              />
+            <div className="relative w-full h-64 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+              {vehiculo.Foto_URL && vehiculo.Foto_URL.startsWith('http') ? (
+                <Image
+                  src={vehiculo.Foto_URL}
+                  alt={`Vehículo ${vehiculo.Patente}`}
+                  fill
+                  className="object-cover"
+                  crossOrigin="anonymous"
+                />
+              ) : (
+                <Car className="h-20 w-20 text-muted-foreground" />
+              )}
             </div>
           )}
 

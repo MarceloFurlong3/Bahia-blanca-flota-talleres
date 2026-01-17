@@ -29,15 +29,18 @@ export function VehiculoCard({ vehiculo, onClick }: VehiculoCardProps) {
           {/* Foto del vehículo */}
           <div className="flex-shrink-0">
             {vehiculo.Foto_URL ? (
-              <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden bg-muted">
-               <Image
-  src={vehiculo.Foto_URL || "/placeholder.svg"}
-  alt={`Vehículo ${vehiculo.Patente}`}
-  fill
-  className="object-cover"
-  unoptimized={true} // <--- AGREGAR ESTO
-  // quitamos crossOrigin="anonymous" porque no es necesario con unoptimized
-/>
+              <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                {vehiculo.Foto_URL && vehiculo.Foto_URL.startsWith('http') ? (
+                  <Image
+                    src={vehiculo.Foto_URL}
+                    alt={`Vehículo ${vehiculo.Patente}`}
+                    fill
+                    className="object-cover"
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <Car className="h-12 w-12 text-muted-foreground" />
+                )}
               </div>
             ) : (
               <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-lg bg-muted flex items-center justify-center">
