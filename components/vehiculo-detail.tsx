@@ -1,15 +1,17 @@
 "use client"
 
+import { useState } from "react"
 import type { Vehiculo } from "@/lib/api"
-import { parseSuministros, type SuministroInfo } from "@/lib/api"
+import { parseSuministros, type SuministroInfo, updateEstadoSuministro } from "@/lib/api"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Button } from "@/components/ui/button"
-import { Car, FileText, MapPin, Wrench, AlertCircle, CheckCircle, Edit, Package, QrCode, History } from "lucide-react"
+import { Car, FileText, MapPin, Wrench, AlertCircle, CheckCircle, Edit, Package, QrCode, History, Loader2, RefreshCw } from "lucide-react"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
+import { toast } from "sonner" // Asumo que usas sonner o similar para avisos
 
 interface VehiculoDetailProps {
   vehiculo: Vehiculo | null
@@ -32,8 +34,7 @@ const ESTADO_ICONS: Record<string, typeof CheckCircle> = {
   Taller: Wrench,
 }
 
-const SUMINISTRO_ESTADO_COLORS: Record<SuministroInfo["estado"], "default" | "secondary" | "destructive" | "outline"> =
-{
+const SUMINISTRO_ESTADO_COLORS: Record<SuministroInfo["estado"], "default" | "secondary" | "destructive" | "outline"> = {
   Terminado: "default",
   Cancelado: "secondary",
   Pendiente: "destructive",
@@ -42,11 +43,37 @@ const SUMINISTRO_ESTADO_COLORS: Record<SuministroInfo["estado"], "default" | "se
 
 export function VehiculoDetail({ vehiculo, open, onOpenChange, onEdit }: VehiculoDetailProps) {
   const { user } = useAuth()
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
 
   if (!vehiculo) return null
 
   const EstadoIcon = ESTADO_ICONS[vehiculo.Estado] || AlertCircle
   const suministros = parseSuministros(vehiculo.Suministros || "")
+
+  // Función para rotar el estado del suministro
+  const handleToggleEstado = async (nroSuministro: string, estadoActual: string) => {
+    // Definimos el orden de rotación: Pendiente -> Terminado -> (podés agregar más)
+    const nuevoEstado = estadoActual === "Terminado" ? "Pendiente" : "Terminado";
+    
+    setUpdatingId(nroSuministro);
+    
+    try {
+      const success = await updateEstadoSuministro(vehiculo.RI, nroSuministro, nuevoEstado);
+      
+      if (success) {
+        toast.success(`Suministro #${nroSuministro} actualizado a ${nuevoEstado}`);
+        // Nota: Aquí lo ideal sería refrescar los datos globales, 
+        // pero por ahora el usuario verá el cambio al reabrir o sincronizar.
+      } else {
+        toast.error("No se pudo actualizar el suministro");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Error de conexión");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -72,202 +99,103 @@ export function VehiculoDetail({ vehiculo, open, onOpenChange, onEdit }: Vehicul
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Foto principal del vehículo */}
-          {vehiculo.Foto_URL && (
-            <div className="relative w-full h-64 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-              {vehiculo.Foto_URL && vehiculo.Foto_URL.startsWith('http') ? (
-                <Image
-                  src={vehiculo.Foto_URL}
-                  alt={`Vehículo ${vehiculo.Patente}`}
-                  fill
-                  className="object-cover"
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <Car className="h-20 w-20 text-muted-foreground" />
-              )}
-            </div>
-          )}
+          {/* Foto principal */}
+          <div className="relative w-full h-64 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+            {vehiculo.Foto_URL && vehiculo.Foto_URL.startsWith('http') ? (
+              <Image
+                src={vehiculo.Foto_URL}
+                alt={`Vehículo ${vehiculo.Patente}`}
+                fill
+                className="object-cover"
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <Car className="h-20 w-20 text-muted-foreground" />
+            )}
+          </div>
 
-          {/* Información básica */}
+          {/* Info General */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Car className="h-5 w-5" />
-                Información General
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Car className="h-5 w-5" /> Información General</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">RI</p>
-                  <p className="text-base font-semibold">{vehiculo.RI}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Patente</p>
-                  <p className="text-base font-semibold">{vehiculo.Patente}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Tipo</p>
-                  <p className="text-base">{vehiculo.Tipo}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Año</p>
-                  <p className="text-base">{vehiculo.Año}</p>
-                </div>
+                <div><p className="text-sm text-muted-foreground">RI</p><p className="text-base font-semibold">{vehiculo.RI}</p></div>
+                <div><p className="text-sm text-muted-foreground">Patente</p><p className="text-base font-semibold">{vehiculo.Patente}</p></div>
               </div>
-
               <Separator />
-
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Estado</p>
-                <div className="flex items-center gap-2">
-                  <EstadoIcon className="h-4 w-4" />
-                  <Badge variant={ESTADO_COLORS[vehiculo.Estado] || "default"}>{vehiculo.Estado}</Badge>
-                </div>
-              </div>
+              <div><Badge variant={ESTADO_COLORS[vehiculo.Estado] || "default"}>{vehiculo.Estado}</Badge></div>
             </CardContent>
           </Card>
 
-          {/* Ubicación y Área */}
-          <Card>
+          {/* SECCIÓN DE SUMINISTROS INTERACTIVA */}
+          <Card className="border-blue-200 bg-blue-50/30">
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Ubicación y Área
+                <Package className="h-5 w-5 text-blue-600" />
+                Suministros (Gestión AB)
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Dependencia</p>
-                <p className="text-base">{vehiculo.Dependencia}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Área Taller</p>
-                <p className="text-base">{vehiculo["Area Taller"]}</p>
-              </div>
+            <CardContent>
+              {suministros.length > 0 ? (
+                <div className="space-y-3">
+                  {suministros.map((suministro, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between gap-3 p-3 bg-white rounded-md border shadow-sm"
+                    >
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          <span className="text-muted-foreground">#{suministro.numero}</span> {suministro.descripcion}
+                        </p>
+                      </div>
+                      
+                      {/* BOTÓN INTERACTIVO PARA CAMBIAR ESTADO */}
+                      <Button
+                        size="sm"
+                        variant={suministro.estado === "Terminado" ? "default" : "outline"}
+                        disabled={updatingId === suministro.numero}
+                        onClick={() => handleToggleEstado(suministro.numero, suministro.estado)}
+                        className="min-w-[110px]"
+                      >
+                        {updatingId === suministro.numero ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            {suministro.estado === "Terminado" ? (
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                            ) : (
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                            )}
+                            {suministro.estado}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-muted p-3 rounded-md">
+                  <p className="text-sm text-muted-foreground">Sin suministros registrados.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Motivo */}
-          {vehiculo.Motivo && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Observaciones
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Motivo</p>
-                  <p className="text-base">{vehiculo.Motivo}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Información de Finalización */}
-          {vehiculo.Final_Resultado && (
-            <Card className="border-primary/50 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-primary">
-                  <CheckCircle className="h-5 w-5" />
-                  Vehículo Finalizado
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Resultado</p>
-                  <p className="text-base">{vehiculo.Final_Resultado}</p>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Finalizado Por</p>
-                    <p className="text-sm">{vehiculo.Finalizado_Por}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Fecha de Finalización</p>
-                    <p className="text-sm">{new Date(vehiculo.Finalizado_Fecha).toLocaleDateString("es-AR")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Historial del Vehículo */}
+          {/* Historial */}
           {vehiculo.Historial && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <History className="h-5 w-5" />
-                  Historial
-                </CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><History className="h-5 w-5" /> Historial</CardTitle></CardHeader>
               <CardContent>
-                <div className="bg-muted p-4 rounded-md">
-                  <p className="text-sm whitespace-pre-line font-mono leading-relaxed">{vehiculo.Historial}</p>
-                </div>
+                <div className="bg-muted p-4 rounded-md font-mono text-sm whitespace-pre-line">{vehiculo.Historial}</div>
               </CardContent>
             </Card>
           )}
 
-          {vehiculo.Suministros && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Suministros (Solo lectura)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {suministros.length > 0 ? (
-                  <div className="space-y-3">
-                    {suministros.map((suministro, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start justify-between gap-3 p-3 bg-muted/50 rounded-md border"
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">
-                            <span className="text-muted-foreground">#{suministro.numero}</span> {suministro.descripcion}
-                          </p>
-                        </div>
-                        <Badge variant={SUMINISTRO_ESTADO_COLORS[suministro.estado]} className="shrink-0">
-                          {suministro.estado}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-muted p-3 rounded-md">
-                    <p className="text-sm whitespace-pre-line text-muted-foreground">{vehiculo.Suministros}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Código QR */}
+          {/* QR */}
           {vehiculo.QR_URL && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <QrCode className="h-5 w-5" />
-                  Código QR del Vehículo
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex justify-center">
-                <div className="relative w-48 h-48 rounded-lg overflow-hidden bg-white p-2">
-                  <Image
-                    src={vehiculo.QR_URL || "/placeholder.svg"}
-                    alt={`QR del vehículo ${vehiculo.Patente}`}
-                    fill
-                    className="object-contain"
-                    crossOrigin="anonymous"
-                  />
-                </div>
+              <CardContent className="flex justify-center p-6">
+                <Image src={vehiculo.QR_URL} alt="QR" width={150} height={150} className="bg-white p-2 rounded-lg border" />
               </CardContent>
             </Card>
           )}

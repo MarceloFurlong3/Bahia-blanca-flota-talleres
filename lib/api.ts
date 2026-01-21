@@ -20,6 +20,12 @@ export interface Vehiculo {
   QR_URL: string;
 }
 
+export interface SuministroInfo {
+  numero: string;
+  descripcion: string;
+  estado: "Terminado" | "Pendiente" | "Cancelado" | "Desconocido";
+}
+
 /**
  * Obtiene la lista completa de vehículos
  */
@@ -104,6 +110,30 @@ export async function updateVehiculo(ri: string, updates: Partial<Vehiculo>, usu
 }
 
 /**
+ * ACTUALIZA EL ESTADO EN LA PLANILLA DE TALLERES (Columna AB)
+ */
+export async function updateEstadoSuministro(ri: string, nroSuministro: string, nuevoEstado: string): Promise<boolean> {
+  try {
+    const params = new URLSearchParams({
+      action: "updateSuministroEstado",
+      ri: ri,
+      nroSuministro: nroSuministro,
+      estado: nuevoEstado,
+    });
+
+    const response = await fetch(`${API_URL}?${params.toString()}`);
+    
+    if (!response.ok) return false;
+
+    const data = await response.json();
+    return data && data.success === true;
+  } catch (error) {
+    console.error("Error actualizando suministro:", error);
+    return false;
+  }
+}
+
+/**
  * Finaliza el trabajo de un vehículo y lo marca como Operativo
  */
 export async function finalizarVehiculo(
@@ -139,16 +169,11 @@ export async function finalizarVehiculo(
   }
 }
 
-
-
 /**
- * MODIFICADO: Sube la imagen convirtiéndola a Base64 para el Script de Google
+ * Sube la imagen convirtiéndola a Base64 para el Script de Google
  */
 export async function uploadImage(file: File): Promise<string | null> {
   try {
-    console.log("--- 🏁 INICIO DE SUBIDA ---");
-    console.log("Archivo seleccionado:", file.name, "Tamaño:", file.size, "bytes");
-
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -159,82 +184,68 @@ export async function uploadImage(file: File): Promise<string | null> {
       reader.readAsDataURL(file);
     });
 
-    console.log("✅ Imagen convertida a Base64 (primeros 50 caracteres):", base64.substring(0, 50) + "...");
-
     const params = new URLSearchParams({
       action: "uploadImage",
       filename: file.name,
     });
 
-    const urlConParams = `${API_URL}?${params.toString()}`;
-    console.log("Enviando petición POST a:", urlConParams);
-
-    const response = await fetch(urlConParams, {
+    const response = await fetch(`${API_URL}?${params.toString()}`, {
       method: 'POST',
       body: JSON.stringify({ base64: base64 }),
       headers: { 'Content-Type': 'application/json' }
     });
 
-    console.log("Respuesta del servidor (status):", response.status);
-
     const data = await response.json();
-    console.log("Datos recibidos de Google:", data);
-
-    if (data.success) {
-      console.log("🚀 ¡ÉXITO! URL de la imagen:", data.url);
-      return data.url;
-    } else {
-      console.error("❌ Error devuelto por Google:", data.error);
-      return null;
-    }
+    return data.success ? data.url : null;
   } catch (error) {
     console.error("💥 ERROR CRÍTICO en la subida:", error);
     return null;
   }
 }
 
-
-
 // --- UTILIDADES ---
 
-export interface SuministroInfo {
-  numero: string
-  descripcion: string
-  estado: "Terminado" | "Pendiente" | "Cancelado" | "Desconocido"
-}
-
 export function parseSuministros(suministrosText: string): SuministroInfo[] {
-  if (!suministrosText || suministrosText.trim() === "") return []
-  const lineas = suministrosText.split("\n").filter((linea) => linea.trim() !== "")
-  const suministros: SuministroInfo[] = []
+  if (!suministrosText || suministrosText.trim() === "") return [];
+  
+  // Separamos por el divisor de pedidos "---" que pusimos en el script
+  const bloques = suministrosText.split('\n---\n').filter(b => b.trim() !== "");
+  const suministros: SuministroInfo[] = [];
 
-  for (const linea of lineas) {
-    const match = linea.match(/^(\d+):\s*(.+?)\s*\((.+?)\)\s*$/)
+  for (const bloque of bloques) {
+    // Buscamos el formato "ID: Detalle (Estado)"
+    // El detalle ahora puede contener saltos de línea (\s\S hace que el punto incluya saltos)
+    const match = bloque.trim().match(/^(.+?):\s*([\s\S]+?)\s*\((.+?)\)$/);
+    
     if (match) {
-      const [, numero, descripcion, estadoText] = match
-      let estado: SuministroInfo["estado"] = "Desconocido"
-      const estadoLower = estadoText.toLowerCase().trim()
-      if (estadoLower === "terminado" || estadoLower === "completado") estado = "Terminado"
-      else if (estadoLower === "pendiente" || estadoLower === "en proceso") estado = "Pendiente"
-      else if (estadoLower === "cancelado") estado = "Cancelado"
+      const [, id, desc, est] = match;
+      let estado: SuministroInfo["estado"] = "Pendiente";
+      if (est.toLowerCase().includes("terminado")) estado = "Terminado";
+      if (est.toLowerCase().includes("cancelado")) estado = "Cancelado";
 
-      suministros.push({ numero, descripcion: descripcion.trim(), estado })
+      suministros.push({
+        numero: id.trim(),
+        descripcion: desc.trim(), // Aquí vendrá la lista: "5 filtros AL 65\n5 FILTROS rk90..."
+        estado
+      });
     }
   }
-  return suministros
+  return suministros;
 }
 
-export function puedeFinalizarVehiculo(suministrosText: string): { puede: boolean; motivo?: string } {
+export function puedeFinalizarVehiculo(suministrosText: string): { puede: boolean; requiereNota: boolean; motivo?: string } {
   const suministros = parseSuministros(suministrosText)
-  if (suministros.length === 0) return { puede: true }
+  if (suministros.length === 0) return { puede: true, requiereNota: false }
+  
   const pendientes = suministros.filter((s) => s.estado === "Pendiente")
   if (pendientes.length > 0) {
     return {
-      puede: false,
-      motivo: `Hay ${pendientes.length} ${pendientes.length === 1 ? "suministro pendiente" : "suministros pendientes"}`,
+      puede: true, 
+      requiereNota: true, 
+      motivo: `Hay suministros pendientes de finalizar. Se requerirá una nota de cierre.`,
     }
   }
-  return { puede: true }
+  return { puede: true, requiereNota: false }
 }
 
 function getDemoData(): Vehiculo[] {

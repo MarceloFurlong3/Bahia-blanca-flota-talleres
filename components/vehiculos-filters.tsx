@@ -1,10 +1,9 @@
 "use client"
 
-import { Search } from "lucide-react"
+import { Search, Package } from "lucide-react" // Importamos Package
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 
 interface VehiculosFiltersProps {
   searchTerm: string
@@ -15,6 +14,7 @@ interface VehiculosFiltersProps {
   onAreaChange: (value: string) => void
   estados: string[]
   areas: string[]
+  isSuministrosFilterActive?: boolean // Agregamos la prop para evitar el error TS(2322)
 }
 
 export function VehiculosFilters({
@@ -47,7 +47,7 @@ export function VehiculosFilters({
           <Input
             id="search"
             type="text"
-            placeholder="Buscar por RI o Marca/Modelo..."
+            placeholder="Buscar por RI, Marca o Patente..."
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-10"
@@ -67,6 +67,17 @@ export function VehiculosFilters({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los estados</SelectItem>
+              
+              {/* --- OPCIÓN ESPECIAL DE SUMINISTROS --- */}
+              <SelectItem value="con_suministros" className="font-medium text-amber-600">
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  📦 Con Suministros
+                </div>
+              </SelectItem>
+              
+              <div className="h-px bg-muted my-1" />
+
               {estados.map((estado) => (
                 <SelectItem key={estado} value={estado}>
                   {estado.charAt(0).toUpperCase() + estado.slice(1)}
@@ -85,15 +96,12 @@ export function VehiculosFilters({
               <SelectValue placeholder="Todas las áreas" />
             </SelectTrigger>
             <SelectContent>
-              {/* Opción principal para el Director */}
               <SelectItem value="all">🏠 TODAS LAS ÁREAS (En Taller)</SelectItem>
               
-              {/* Opción específica para lo que está afuera */}
               <SelectItem value="En funcionamiento">✅ En funcionamiento (Fuera de Taller)</SelectItem>
               
               <div className="h-px bg-muted my-1" />
               
-              {/* Listado de áreas específicas */}
               {areasInternasTaller.map((area) => (
                 <SelectItem key={area} value={area}>
                   {area.charAt(0).toUpperCase() + area.slice(1)}
